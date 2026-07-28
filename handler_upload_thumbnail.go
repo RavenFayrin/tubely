@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const MAX_MEMORY = 10 << 20
-
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
 	videoIDString := r.PathValue("videoID")
 	videoID, err := uuid.Parse(videoIDString)
@@ -31,46 +29,52 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	const maxMemory = 10 << 20 // 10 MB
+	r.ParseMultipartForm(maxMemory)
 
-	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
-
-	err = r.ParseMultipartForm(MAX_MEMORY)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't parse multipart form", err)
-		return
-	}
 	file, header, err := r.FormFile("thumbnail")
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't parse multipart form", err)
+		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
 	}
-	contentType := header.Header.Get("Content-Type")
-	fileBytes, err := io.ReadAll(file)
+	defer file.Close()
+
+	mediaType := header.Header.Get("Content-Type")
+	if mediaType == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
+		return
+	}
+
+	data, err := io.ReadAll(file)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't read file", err)
+		respondWithError(w, http.StatusInternalServerError, "Error reading file", err)
 		return
 	}
+
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't fetch video", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't find video", err)
 		return
 	}
 	if video.UserID != userID {
-		respondWithError(w, http.StatusUnauthorized, "Not user's video", err)
+		respondWithError(w, http.StatusUnauthorized, "Not authorized to update this video", nil)
 		return
 	}
 
-	tbn := thumbnail{
-		data: fileBytes,
-		mediaType: contentType,
+	videoThumbnails[videoID] = thumbnail{
+		data:      data,
+		mediaType: mediaType,
 	}
 
-	videoThumbnails[videoID] = tbn
-	url := fmt.Sprintf("http://localhost:%v/api/thumbnails/%v", cfg.port, videoID)
-	
+	url := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID)
 	video.ThumbnailURL = &url
 
-	cfg.db.UpdateVideo(video)
+	err = cfg.db.UpdateVideo(video)
+	if err != nil {
+		delete(videoThumbnails, videoID)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, video)
 }
