@@ -16,21 +16,20 @@ func (cfg apiConfig) ensureAssetsDir() error {
 	return nil
 }
 
-func makeByteHex() string {
+func getAssetPath(mediaType string) string {
 	base := make([]byte, 32)
 	_, err := rand.Read(base)
 	if err != nil {
 		panic("failed to generate random bytes")
 	}
 	id := base64.RawURLEncoding.EncodeToString(base)
-	return id
-}
-
-func getAssetPath(mediaType string) string {
-	id := makeByteHex()
 
 	ext := mediaTypeToExt(mediaType)
 	return fmt.Sprintf("%s%s", id, ext)
+}
+
+func (cfg apiConfig) getObjectURL(key string) string {
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, key)
 }
 
 func (cfg apiConfig) getAssetDiskPath(assetPath string) string {
@@ -47,8 +46,4 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
-}
-
-func (cfg apiConfig) getassetAWSURL(assestKey string) string {
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, assestKey)
 }
