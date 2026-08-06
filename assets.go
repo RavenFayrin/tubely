@@ -16,7 +16,7 @@ func (cfg apiConfig) ensureAssetsDir() error {
 	return nil
 }
 
-func getAssetPath(mediaType string) string {
+func getAssetPath(mediaType string, aspectRatio string) string {
 	base := make([]byte, 32)
 	_, err := rand.Read(base)
 	if err != nil {
@@ -24,8 +24,16 @@ func getAssetPath(mediaType string) string {
 	}
 	id := base64.RawURLEncoding.EncodeToString(base)
 
+	ar := "other/"
+	if aspectRatio == "16:9" {
+		ar = "landscape/"
+	}
+	if aspectRatio == "9:16" {
+		ar = "portrait/"
+	}
+
 	ext := mediaTypeToExt(mediaType)
-	return fmt.Sprintf("%s%s", id, ext)
+	return fmt.Sprintf("%s%s%s", ar, id, ext)
 }
 
 func (cfg apiConfig) getObjectURL(key string) string {

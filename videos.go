@@ -29,24 +29,13 @@ func getVideoAspectRatio(filePath string) (string, error) {
 		return "", errors.New("JSON unmarshaling failure")
 	}
 
-	aspect1, aspect2 := GetReducedRatio(data.Streams[0].Width, data.Streams[0].Height)
-	if aspect1 == 16 && aspect2 == 9 {
+	width := data.Streams[0].Width
+	height := data.Streams[0].Height
+
+	if width == 16*height/9 {
 		return "16:9", nil
-	}
-	if aspect1 == 9 && aspect2 == 16 {
+	} else if height == 16*width/9 {
 		return "9:16", nil
 	}
 	return "other", nil
-}
-
-func GetReducedRatio(w, h int) (int, int) {
-	d := greatestCommonDivisor(w, h)
-	return w / d, h / d
-}
-
-func greatestCommonDivisor(a, b int) int {
-	for b != 0 {
-		a, b = b, a%b
-	}
-	return a
 }
