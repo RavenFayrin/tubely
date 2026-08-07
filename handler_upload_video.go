@@ -142,7 +142,13 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, video)
+	signedVideo, err := cfg.dbVideoToSignedVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not get video", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, signedVideo)
 }
 
 func getVideoAspectRatio(filePath string) (string, error) {
@@ -212,7 +218,7 @@ func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime ti
 	presignedClient := s3.NewPresignClient(s3Client)
 	req, err := presignedClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: &bucket,
-		Key: &key,
+		Key:    &key,
 	}, s3.WithPresignExpires(expireTime))
 	if err != nil {
 		return "", err
@@ -221,8 +227,20 @@ func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime ti
 }
 
 func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
+	if video.VideoURL == nil {
+		return video, nil
+	}
 	parts := strings.Split(*video.VideoURL, ",")
+	if len(parts) < 2 {
+		return database.Video{}, errors.New("URL not in new format")
+	}
 	bucket := parts[0]
 	key := parts[1]
-	generatePresignedURL(cfg.s3Client, bucket, key, time.Duration(5))
+	expireTime := 5 * time.Minute
+	url, err := generatePresignedURL(cfg.s3Client, bucket, key, expireTime)
+	if err != nil {
+		return database.Video{}, err
+	}
+	video.VideoURL = &url
+	return video, nil
 }
